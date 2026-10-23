@@ -3,16 +3,16 @@ from rd_sweep import DEFAULTS, validate_config
 
 class RDTests(unittest.TestCase):
     def test_valid(self):
-        self.assertEqual(validate_config(DEFAULTS)[1],25)
+        self.assertEqual(validate_config(DEFAULTS)[1],81*181)
     def test_requested_stop_outside_limits(self):
         with self.assertRaises(ValueError):
-            validate_config(dict(DEFAULTS,main_stop=-2.64))
+            validate_config(dict(DEFAULTS,main_stop=-5.01))
     def test_nan(self):
         with self.assertRaises(ValueError):
             validate_config(dict(DEFAULTS,main_min=float('nan')))
     def test_reversed_limits(self):
         with self.assertRaises(ValueError):
-            validate_config(dict(DEFAULTS,main_min=-2.6))
+            validate_config(dict(DEFAULTS,main_min=0))
     def test_zero_step(self):
         with self.assertRaises(ValueError):
             validate_config(dict(DEFAULTS,peaking_step=0))
@@ -28,7 +28,7 @@ class DirectionTests(unittest.TestCase):
         self.assertEqual(validate_config(c)[1],81*181)
     def test_descending_outside_rd(self):
         with self.assertRaises(ValueError):
-            validate_config(dict(DEFAULTS,main_start=-2.6,main_stop=-2.9))
+            validate_config(dict(DEFAULTS,main_start=-.9,main_stop=-2.9))
     def test_below_dac_range(self):
         with self.assertRaises(ValueError):
             validate_config(dict(DEFAULTS,peaking_min=-10.1))

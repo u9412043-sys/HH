@@ -8,10 +8,10 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
-VERSION = '2.1'
-MODEL_BOUNDS = {'main': (-2.95, -2.65), 'peaking': (-5.0, -4.95)}
+VERSION = '2.2'
+MODEL_BOUNDS = {'main': (-5.0, -1.0), 'peaking': (-10.0, -1.0)}
 RF_MODEL_BOUNDS = (20.0, 35.0)
-MODEL_ID = 'illustrative-local-v2'
+MODEL_ID = 'illustrative-bounded-v3'
 LIMIT_A = 3.0  # Total Main + Peaking drain current, not per-branch.
 FIELDS = ['mode', 'stage', 'point_id', 'main_vgs_v', 'peaking_vgs_v',
           'main_idd_a', 'peaking_idd_a', 'total_idd_a', 'status',
@@ -54,8 +54,12 @@ def check_rf_power(rf):
 
 def currents(main, peaking):
     check_model_bias(main, peaking)
-    # Illustrative nonlinear transfer model; NOT calibrated device data.
-    return 1.4 * (max(0, main+3.5)/0.71)**2, 0.15 * (max(0, peaking+5)/0.022)**2
+    # Bounded illustrative transfer curves, NOT fitted to the real PA.
+    # Plateau amplitudes are arbitrary model parameters, NOT hardware limits.
+    # Current is not clipped to the 3 A protection threshold.
+    main_a = 1.6 / (1.0 + math.exp(-(main + 3.66566) / 0.45))
+    peaking_a = 0.8 / (1.0 + math.exp(-(peaking + 4.0982) / 0.60))
+    return main_a, peaking_a
 
 
 def row(stage, point_id, main, peaking, rf=None, waveform=''):
@@ -144,9 +148,9 @@ def run(args):
 
 
 # Example limits only: RD must replace them before any future hardware use.
-DEFAULTS = dict(main_min=-2.95, main_max=-2.65, peaking_min=-5.0, peaking_max=-4.95,
-                main_start=-2.89, main_stop=-2.69, main_step=.05,
-                peaking_start=-4.998, peaking_stop=-4.978, peaking_step=.005)
+DEFAULTS = dict(main_min=-5.0, main_max=-1.0, peaking_min=-10.0, peaking_max=-1.0,
+                main_start=-1.0, main_stop=-5.0, main_step=.05,
+                peaking_start=-1.0, peaking_stop=-10.0, peaking_step=.05)
 
 
 def validate_config(config):
@@ -174,7 +178,7 @@ def gui():
     root.title('Doherty PA — RD 範圍設定 v' + VERSION + ' / SIMULATION ONLY')
     frame = ttk.Frame(root, padding=15)
     frame.grid()
-    ttk.Label(frame, text='僅模擬，無實機控制。模型：Main -2.95～-2.65 V；Peaking -5～-4.95 V。', foreground='red').grid(row=0, columnspan=3, pady=8)
+    ttk.Label(frame, text='僅模擬，無實機控制。模型：Main -5～-1 V；Peaking -10～-1 V。', foreground='red').grid(row=0, columnspan=3, pady=8)
     entries = {}
     labels = {'min':'RD 安全下限 (V)', 'max':'RD 安全上限 (V)', 'start':'掃描起點 (V)', 'stop':'掃描終點 (V)', 'step':'步距大小 (V，填正數)'}
     ttk.Label(frame, text='設定').grid(row=1,column=0)
