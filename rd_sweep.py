@@ -8,6 +8,10 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
+VERSION = '2.1'
+MODEL_BOUNDS = {'main': (-2.95, -2.65), 'peaking': (-5.0, -4.95)}
+RF_MODEL_BOUNDS = (20.0, 35.0)
+MODEL_ID = 'illustrative-local-v2'
 LIMIT_A = 3.0  # Total Main + Peaking drain current, not per-branch.
 FIELDS = ['mode', 'stage', 'point_id', 'main_vgs_v', 'peaking_vgs_v',
           'main_idd_a', 'peaking_idd_a', 'total_idd_a', 'status',
@@ -32,7 +36,24 @@ def bias(v):
     return v
 
 
+def check_model_bias(main, peaking):
+    for name, value in [('main', main), ('peaking', peaking)]:
+        lo, hi = MODEL_BOUNDS[name]
+        if not math.isfinite(value) or not lo <= value <= hi:
+            raise ValueError(f'{name}={value} V 超出示意模型範圍 [{lo}, {hi}] V。'
+                             '尚無實測校準，不能推算此偏壓的電流。'
+                             '請按「恢復模擬範例」或縮小掃描範圍；不會產生量測檔。')
+
+
+def check_rf_power(rf):
+    lo, hi = RF_MODEL_BOUNDS
+    if not math.isfinite(rf) or not lo <= rf <= hi:
+        raise ValueError(f'RF 示意模型僅支援 {lo}～{hi} dBm，不能推算 {rf} dBm 的工作電流。'
+                         '這不是實機功率限制；需要實測資料才能建立其他條件的模型。')
+
+
 def currents(main, peaking):
+    check_model_bias(main, peaking)
     # Illustrative nonlinear transfer model; NOT calibrated device data.
     return 1.4 * (max(0, main+3.5)/0.71)**2, 0.15 * (max(0, peaking+5)/0.022)**2
 
@@ -40,6 +61,7 @@ def currents(main, peaking):
 def row(stage, point_id, main, peaking, rf=None, waveform=''):
     im, ip = currents(main, peaking)
     if rf is not None:
+        check_rf_power(rf)
         # Arbitrary demonstration of RF-dependent current, not a PA prediction.
         factor = 10**((rf-30)/10)
         im += .35*factor
@@ -71,8 +93,7 @@ def run(args):
             raise ValueError('At most 100000 combinations')
         pairs = [(bias(m), bias(p)) for m in mains for p in peaks]
     else:
-        if not math.isfinite(args.rf_output_dbm) or not -100 <= args.rf_output_dbm <= 60:
-            raise ValueError('Simulation RF output must be finite and between -100 and 60 dBm')
+        check_rf_power(args.rf_output_dbm)
         if not args.waveform.strip():
             raise ValueError('Waveform label must not be empty')
         pairs = []
@@ -89,13 +110,17 @@ def run(args):
                 if len(pairs) > 100000:
                     raise ValueError('Too many candidates')
     if not pairs:
-        raise ValueError('No eligible candidate points')
+        raise ValueError('CSV 沒有可用候選點：檔案可能為空，或所有點皆因總電流達 3 A 而被排除。'
+                         '請恢復模擬範例，重新執行第一階段並載入新 CSV；不要修改過流狀態來繞過限制。')
     config = getattr(args, 'rd_config', None)
     if config:
         for m, p in pairs:
             for name, value in [('main', m), ('peaking', p)]:
                 if not config[name+'_min'] <= value <= config[name+'_max']:
                     raise ValueError(name + ' Vgs exceeds RD limits')
+    # Validate every candidate BEFORE simulation or file creation.
+    for m, p in pairs:
+        check_model_bias(m, p)
     rows = []
     for index, (main, peak) in enumerate(pairs, 1):
         result = row(args.stage, index, main, peak,
@@ -110,7 +135,8 @@ def run(args):
     if config:
         with output.with_suffix('.settings.json').open('x', encoding='utf-8') as f:
             json.dump(dict(config, total_current_limit_a=LIMIT_A, mode='simulation',
-                           stage=args.stage, rf_output_dbm=getattr(args, 'rf_output_dbm', None),
+                           stage=args.stage, model_id=MODEL_ID, version=VERSION, model_bounds=MODEL_BOUNDS,
+                           rf_model_bounds_dbm=RF_MODEL_BOUNDS, rf_output_dbm=getattr(args, 'rf_output_dbm', None),
                            waveform=getattr(args, 'waveform', None),
                            input_csv=str(getattr(args, 'input', '') or '')),
                       f, ensure_ascii=False, indent=2)
@@ -145,10 +171,10 @@ def gui():
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
     root = tk.Tk()
-    root.title('Doherty PA — RD 範圍設定 / SIMULATION ONLY')
+    root.title('Doherty PA — RD 範圍設定 v' + VERSION + ' / SIMULATION ONLY')
     frame = ttk.Frame(root, padding=15)
     frame.grid()
-    ttk.Label(frame, text='僅模擬：預設範圍是範例，非 PA 安全規格。無硬體控制。', foreground='red').grid(row=0, columnspan=3, pady=8)
+    ttk.Label(frame, text='僅模擬，無實機控制。模型：Main -2.95～-2.65 V；Peaking -5～-4.95 V。', foreground='red').grid(row=0, columnspan=3, pady=8)
     entries = {}
     labels = {'min':'RD 安全下限 (V)', 'max':'RD 安全上限 (V)', 'start':'掃描起點 (V)', 'stop':'掃描終點 (V)', 'step':'步距大小 (V，填正數)'}
     ttk.Label(frame, text='設定').grid(row=1,column=0)
@@ -165,7 +191,7 @@ def gui():
     ttk.Label(frame,textvariable=result,wraplength=610).grid(row=12,columnspan=3,pady=10)
     rf_power=tk.StringVar(value='30')
     waveform=tk.StringVar(value='demo')
-    ttk.Label(frame,text='模擬 RF 輸出 (dBm)').grid(row=9,column=0)
+    ttk.Label(frame,text='模擬 RF 輸出 (20～35 dBm)').grid(row=9,column=0)
     ttk.Entry(frame,textvariable=rf_power).grid(row=9,column=1)
     ttk.Label(frame,text='波形名稱').grid(row=10,column=0)
     ttk.Entry(frame,textvariable=waveform).grid(row=10,column=1)
@@ -194,10 +220,22 @@ def gui():
                 entries[k].set(str(v))
             result.set('RD 設定已載入：'+target)
 
+    def restore_example():
+        for key, value in DEFAULTS.items():
+            entries[key].set(str(value))
+        rf_power.set('30')
+        waveform.set('demo')
+        result.set('已恢復模擬範例。RD 範圍非實機安全規格，請重新執行第一階段。')
+
     def execute(stage):
         c,count=config()
         source=None
+        if stage=='static':
+            for m in (c['main_start'],c['main_stop']):
+                for p in (c['peaking_start'],c['peaking_stop']):
+                    check_model_bias(m,p)
         if stage=='rf':
+            check_rf_power(float(rf_power.get()))
             source=filedialog.askopenfilename(title='選擇第一階段 CSV',filetypes=[('CSV','*.csv')])
             if not source:
                 return
@@ -214,14 +252,17 @@ def gui():
             return
         args=argparse.Namespace(**c,stage=stage,rd_config=c,output=Path(target),
                                 input=Path(source) if source else None,
-                                rf_output_dbm=float(rf_power.get()),waveform=waveform.get())
+                                rf_output_dbm=float(rf_power.get()) if stage=='rf' else None,waveform=waveform.get())
         output,rows=run(args)
         result.set(f'完成 {len(rows)} 點：{output}；結束狀態：{rows[-1]["status"]}。ACLR 未量測。')
+        if not any(r['status']=='simulated' for r in rows):
+            messagebox.showwarning('沒有可用候選點', '第一點即達總電流 3 A，已停止。此 CSV 無法供第二階段使用；請調整偏壓後重跑第一階段。')
 
     ttk.Button(frame,text='載入 RD 設定',command=lambda:protect(load_config)).grid(row=8,column=0)
     ttk.Button(frame,text='儲存 RD 設定',command=lambda:protect(save_config)).grid(row=8,column=1)
     ttk.Button(frame,text='第一階段：靜態掃描',command=lambda:protect(lambda:execute('static'))).grid(row=11,column=0,pady=10)
     ttk.Button(frame,text='第二階段：RF 模擬',command=lambda:protect(lambda:execute('rf'))).grid(row=11,column=1,pady=10)
+    ttk.Button(frame,text='恢復模擬範例',command=restore_example).grid(row=13,column=0,pady=8)
     root.mainloop()
 
 
