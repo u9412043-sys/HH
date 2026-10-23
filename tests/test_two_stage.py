@@ -3,7 +3,7 @@ from two_stage_idd import row, LIMIT_A
 
 class TwoStageTests(unittest.TestCase):
     def test_total_limit(self):
-        r = row('static', 1, -2.6, -4.97)
+        r = row('static', 1, -2.5, -4.96)
         self.assertLess(r['main_idd_a'], LIMIT_A)
         self.assertLess(r['peaking_idd_a'], LIMIT_A)
         self.assertEqual(r['status'], 'total_current_limit')
