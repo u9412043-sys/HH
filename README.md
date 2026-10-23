@@ -36,3 +36,20 @@ python two_stage_idd.py rf --input static.csv --rf-output-dbm 30 --waveform demo
 第一階段掃描無 RF 偏壓與靜態總電流。第二階段讀取第一階段 CSV 的候選點，模擬指定輸出功率下的工作電流。可複製並刪除 static CSV 中不想測試的資料列來挑選候選點，保留表頭。兩階段均在 Main + Peaking **總電流 >= 3 A** 時記錄該點並停止。軟體停止不等同硬體過流保護。
 
 模擬曲線與 RF 電流模型是任意示意，不預測真實 PA。`--rf-output-dbm` 僅設定模擬條件，沒有實際控制 RF 功率。ACLR 欄位留白；沒有連接 IQxel、沒有合格判定與最佳點排名。實機仍需 cmdline 範例、安全範圍、RF 控制與量測協定。
+
+## RD 範圍設定視窗（rd_sweep.py）
+
+安裝含 tkinter 的 Python 3.10+，執行 `python rd_sweep.py` 或雙擊 `start_rd.bat`。`rd_sweep.py` 是獨立檔案，不依賴其他專案模組。
+
+視窗可分別設定 Main／Peaking 的 RD 安全下限、上限、掃描起點、終點與步距。所有預設值僅供模擬展示，非實機安全規格。可儲存／載入 JSON 設定，開始前檢查範圍並顯示確認畫面。總電流上限固定為 3 A。輸出 CSV 旁同時存放本次 `.settings.json` 設定，方便追溯；既有 CSV 不覆寫。
+
+第一階段執行雙支路組合掃描；將某支路起點與終點設為相同即可固定該支路。第二階段選擇第一階段 CSV，依 CSV 偏壓逐點執行，並重新檢查 RD 安全上下限；第二階段不依視窗掃描起終點篩選候選點。可先另存一份 CSV，刪除不需要的資料列並保留表頭。
+
+命令列也可使用：
+
+```bash
+python rd_sweep.py static --config rd_config.example.json --output static.csv
+python rd_sweep.py rf --config rd_config.example.json --input static.csv --rf-output-dbm 30 --waveform demo --output rf.csv
+```
+
+目前仍是模擬；RF 功率只是模擬參數，無實際 RF 控制。ACLR 未量測，不判定合格或最佳點。這個版本未加入量測等待時間、多次平均或實機 cmdline。實機整合須另行確認。CLI 及範圍驗證已測試；雲端沒有圖形顯示環境，未驗證 Windows 視窗實際操作。

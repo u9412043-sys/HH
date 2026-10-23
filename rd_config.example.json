@@ -1,0 +1,12 @@
+{
+  "main_min": -2.95,
+  "main_max": -2.65,
+  "peaking_min": -5.0,
+  "peaking_max": -4.95,
+  "main_start": -2.89,
+  "main_stop": -2.69,
+  "main_step": 0.05,
+  "peaking_start": -4.998,
+  "peaking_stop": -4.978,
+  "peaking_step": 0.005
+}
