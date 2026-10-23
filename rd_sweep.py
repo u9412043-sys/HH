@@ -16,18 +16,19 @@ FIELDS = ['mode', 'stage', 'point_id', 'main_vgs_v', 'peaking_vgs_v',
 
 def axis(start, stop, step):
     a, b, s = (Decimal(str(v)) for v in (start, stop, step))
-    if not all(v.is_finite() for v in (a, b, s)) or s <= 0 or a > b:
-        raise ValueError('Require finite start <= stop and step > 0')
-    n = int((b-a)//s)+1
+    if not all(v.is_finite() for v in (a, b, s)) or s <= 0:
+        raise ValueError('起點、終點與步距須為有限數值，步距須大於 0。')
+    direction = Decimal(1) if b >= a else Decimal(-1)
+    n = int(abs(b-a)//s)+1
     if n > 10000:
         raise ValueError('Too many axis points')
-    return [float(a+i*s) for i in range(n)]
+    return [float(a+i*s*direction) for i in range(n)]
 
 
 def bias(v):
     v = float(v)
-    if not math.isfinite(v) or not -5 <= v <= 0:
-        raise ValueError('Simulation bias must be between -5 and 0 V')
+    if not math.isfinite(v) or not -10 <= v <= 0:
+        raise ValueError('模擬電壓須在 -10～0 V；此範圍不是 PA 安全規格。')
     return v
 
 
@@ -129,11 +130,11 @@ def validate_config(config):
     for name in ('main', 'peaking'):
         lo, hi = bias(c[name+'_min']), bias(c[name+'_max'])
         if lo > hi:
-            raise ValueError(name + ': RD minimum must not exceed maximum')
+            raise ValueError(name + '：RD 安全下限不得大於上限。')
         values = axis(c[name+'_start'], c[name+'_stop'], c[name+'_step'])
         # Check requested stop as well, even if the step does not land on it.
-        if not lo <= c[name+'_start'] <= c[name+'_stop'] <= hi:
-            raise ValueError(name + ': sweep must be inside RD limits')
+        if not (lo <= c[name+'_start'] <= hi and lo <= c[name+'_stop'] <= hi):
+            raise ValueError(name + '：掃描起點與終點都必須在 RD 安全上下限內。')
     count = len(axis(c['main_start'], c['main_stop'], c['main_step'])) * len(axis(c['peaking_start'], c['peaking_stop'], c['peaking_step']))
     if count > 100000:
         raise ValueError('At most 100000 combinations')
@@ -149,7 +150,7 @@ def gui():
     frame.grid()
     ttk.Label(frame, text='僅模擬：預設範圍是範例，非 PA 安全規格。無硬體控制。', foreground='red').grid(row=0, columnspan=3, pady=8)
     entries = {}
-    labels = {'min':'RD 安全下限 (V)', 'max':'RD 安全上限 (V)', 'start':'掃描起點 (V)', 'stop':'掃描終點 (V)', 'step':'步距 (V)'}
+    labels = {'min':'RD 安全下限 (V)', 'max':'RD 安全上限 (V)', 'start':'掃描起點 (V)', 'stop':'掃描終點 (V)', 'step':'步距大小 (V，填正數)'}
     ttk.Label(frame, text='設定').grid(row=1,column=0)
     ttk.Label(frame, text='Main').grid(row=1,column=1)
     ttk.Label(frame, text='Peaking').grid(row=1,column=2)
@@ -159,7 +160,7 @@ def gui():
             key=name+'_'+suffix
             entries[key]=tk.StringVar(value=str(DEFAULTS[key]))
             ttk.Entry(frame,textvariable=entries[key],width=20).grid(row=i,column=j,padx=5)
-    ttk.Label(frame,text='Main + Peaking 總電流上限：3 A（固定）').grid(row=7,columnspan=3,pady=10)
+    ttk.Label(frame,text='方向由起終點決定；總電流上限 3 A（固定）').grid(row=7,columnspan=3,pady=10)
     result=tk.StringVar(value='第一階段：無 RF。第二階段：載入第一階段 CSV。')
     ttk.Label(frame,textvariable=result,wraplength=610).grid(row=12,columnspan=3,pady=10)
     rf_power=tk.StringVar(value='30')
