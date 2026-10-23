@@ -10,7 +10,7 @@ from pathlib import Path
 
 VERSION = '2.2'
 MODEL_BOUNDS = {'main': (-5.0, -1.0), 'peaking': (-10.0, -1.0)}
-RF_MODEL_BOUNDS = (20.0, 35.0)
+RF_MODEL_BOUNDS = (20.0, 46.0)
 MODEL_ID = 'illustrative-bounded-v3'
 LIMIT_A = 3.0  # Total Main + Peaking drain current, not per-branch.
 FIELDS = ['mode', 'stage', 'point_id', 'main_vgs_v', 'peaking_vgs_v',
@@ -195,7 +195,7 @@ def gui():
     ttk.Label(frame,textvariable=result,wraplength=610).grid(row=12,columnspan=3,pady=10)
     rf_power=tk.StringVar(value='30')
     waveform=tk.StringVar(value='demo')
-    ttk.Label(frame,text='模擬 RF 輸出 (20～35 dBm)').grid(row=9,column=0)
+    ttk.Label(frame,text='模擬 RF 輸出 (20～46 dBm)').grid(row=9,column=0)
     ttk.Entry(frame,textvariable=rf_power).grid(row=9,column=1)
     ttk.Label(frame,text='波形名稱').grid(row=10,column=0)
     ttk.Entry(frame,textvariable=waveform).grid(row=10,column=1)

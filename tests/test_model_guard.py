@@ -11,7 +11,7 @@ class ModelGuardTests(unittest.TestCase):
             currents(-.9,-1)
     def test_unmodelled_rf_rejected(self):
         with self.assertRaisesRegex(ValueError,'RF 示意模型'):
-            row('rf',1,-2.79,-4.978,46,'FR1')
+            row('rf',1,-2.79,-4.978,47,'FR1')
     def test_no_current_clipping(self):
         r=row('rf',1,-1,-1,35,'demo')
         self.assertGreater(r['total_idd_a'],3)
@@ -51,3 +51,9 @@ class ModelGuardTests(unittest.TestCase):
         self.assertTrue(all(math.isfinite(v) and 0 <= v <= 1.6 for v in main))
         self.assertTrue(all(math.isfinite(v) and 0 <= v <= .8 for v in peak))
         self.assertLess(sum(currents(-1,-1)),3)
+
+    def test_46_dbm_accepted_and_current_limit_preserved(self):
+        r=row('rf',1,-2.79,-4.978,46,'FR1')
+        self.assertEqual(r['rf_output_dbm'],46)
+        self.assertEqual(r['status'],'total_current_limit')
+        self.assertGreater(r['total_idd_a'],3)
