@@ -17,7 +17,8 @@ for col,(name,low,ref,cap,mid,width,rfadd) in enumerate([
  q=cap/(1+np.exp(-(v+mid)/width))
  ax=axes[0,col]
  ax.plot(v,q,color='#1565c0',lw=3,label='無 RF：靜態 Iddq（示意模型）')
- ax.plot(v,q+rfadd,color='#ef6c00',lw=3,label='有 RF：平均 Idd（固定輸入條件示意）')
+ rf_extra=rfadd/(1+np.exp(-(v+mid+0.5)/width))
+ ax.plot(v,q+rf_extra,color='#ef6c00',lw=3,label='有 RF：平均 Idd（固定輸入條件示意）')
  ax.axvline(ref,color='#777',ls='--',lw=1)
  qr=cap/(1+np.exp(-(ref+mid)/width))
  ax.scatter([ref],[qr],color='#1565c0',s=50,zorder=5)
