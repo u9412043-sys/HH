@@ -8,5 +8,10 @@
   "main_step": 0.05,
   "peaking_start": -1.0,
   "peaking_stop": -10.0,
-  "peaking_step": 0.05
+  "peaking_step": 0.05,
+  "rf_sweep": {
+    "start": 0,
+    "stop": 50,
+    "step": 1
+  }
 }

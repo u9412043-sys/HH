@@ -11,7 +11,7 @@ class ModelGuardTests(unittest.TestCase):
             currents(-.9,-1)
     def test_unmodelled_rf_rejected(self):
         with self.assertRaisesRegex(ValueError,'RF 示意模型'):
-            row('rf',1,-2.79,-4.978,47,'FR1')
+            row('rf',1,-2.79,-4.978,51,'FR1')
     def test_no_current_clipping(self):
         r=row('rf',1,-1,-1,35,'demo')
         self.assertGreater(r['total_idd_a'],3)
@@ -38,8 +38,9 @@ class ModelGuardTests(unittest.TestCase):
                 w=csv.DictWriter(f,fieldnames=['mode','stage','status','main_vgs_v','peaking_vgs_v'])
                 w.writeheader();w.writerow(dict(mode='simulation',stage='static',status='total_current_limit',main_vgs_v=-1,peaking_vgs_v=-1))
             a=argparse.Namespace(stage='rf',input=p,rf_output_dbm=30,waveform='demo')
-            with self.assertRaisesRegex(ValueError,'沒有可用候選點'):
-                run(a)
+            a.output=Path(d)/'rf.csv'
+            _,rows=run(a)
+            self.assertEqual(len(rows),1)
 
     def test_bounded_monotonic_full_domain(self):
         import math

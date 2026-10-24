@@ -8,9 +8,9 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
-VERSION = '2.2'
+VERSION = '2.3'
 MODEL_BOUNDS = {'main': (-5.0, -1.0), 'peaking': (-10.0, -1.0)}
-RF_MODEL_BOUNDS = (20.0, 46.0)
+RF_MODEL_BOUNDS = (0.0, 50.0)
 MODEL_ID = 'illustrative-bounded-v3'
 LIMIT_A = 3.0  # Total Main + Peaking drain current, not per-branch.
 FIELDS = ['mode', 'stage', 'point_id', 'main_vgs_v', 'peaking_vgs_v',
@@ -84,9 +84,25 @@ def save(rows, output):
         writer.writeheader()
         writer.writerows(rows)
     print(f'SIMULATION ONLY: {len(rows)} points saved to {output}')
-    if rows[-1]['status'] == 'total_current_limit':
-        print('STOP: total Main + Peaking current reached/exceeded 3 A.')
+    events = sum(r['status'] == 'total_current_limit' for r in rows)
+    print(f'總電流 >= 3 A 模擬事件：{events} 點；僅記錄，掃描不停止。')
     print('ACLR fields intentionally empty; no pass/fail or optimum selected.')
+
+
+def rf_axis(args):
+    start = getattr(args, 'rf_start', None)
+    stop = getattr(args, 'rf_stop', None)
+    if start is None and stop is None:
+        power = getattr(args, 'rf_output_dbm', None)
+        if power is not None:
+            check_rf_power(power)
+            return [power]
+        start, stop = 0.0, 50.0
+    if start is None or stop is None:
+        raise ValueError('RF 起點與終點必須一起設定。')
+    check_rf_power(start)
+    check_rf_power(stop)
+    return axis(start, stop, getattr(args, 'rf_step', 1.0))
 
 
 def run(args):
@@ -97,7 +113,7 @@ def run(args):
             raise ValueError('At most 100000 combinations')
         pairs = [(bias(m), bias(p)) for m in mains for p in peaks]
     else:
-        check_rf_power(args.rf_output_dbm)
+        powers = rf_axis(args)
         if not args.waveform.strip():
             raise ValueError('Waveform label must not be empty')
         pairs = []
@@ -108,14 +124,13 @@ def run(args):
             for r in reader:
                 if r['stage'] != 'static' or r['mode'] != 'simulation':
                     raise ValueError('Only simulated static-stage CSV is supported')
-                if r['status'] != 'simulated':
+                if r['status'] not in ('simulated', 'total_current_limit'):
                     continue
                 pairs.append((bias(r['main_vgs_v']), bias(r['peaking_vgs_v'])))
                 if len(pairs) > 100000:
                     raise ValueError('Too many candidates')
     if not pairs:
-        raise ValueError('CSV 沒有可用候選點：檔案可能為空，或所有點皆因總電流達 3 A 而被排除。'
-                         '請恢復模擬範例，重新執行第一階段並載入新 CSV；不要修改過流狀態來繞過限制。')
+        raise ValueError('CSV 沒有可用候選點：請確認有第一階段資料，且狀態為 simulated 或 total_current_limit。')
     config = getattr(args, 'rd_config', None)
     if config:
         for m, p in pairs:
@@ -125,14 +140,15 @@ def run(args):
     # Validate every candidate BEFORE simulation or file creation.
     for m, p in pairs:
         check_model_bias(m, p)
+    powers = powers if args.stage == 'rf' else [None]
+    if len(pairs) * len(powers) > 1000000:
+        raise ValueError('總組合超過 1,000,000 點，請加大步距或減少候選偏壓。')
     rows = []
-    for index, (main, peak) in enumerate(pairs, 1):
-        result = row(args.stage, index, main, peak,
-                     args.rf_output_dbm if args.stage == 'rf' else None,
-                     args.waveform if args.stage == 'rf' else '')
-        rows.append(result)
-        if result['total_idd_a'] >= LIMIT_A:
-            break
+    for main, peak in pairs:
+        for power in powers:
+            rows.append(row(args.stage, len(rows)+1, main, peak, power,
+                            args.waveform if args.stage == 'rf' else ''))
+    # Simulation-only event recording: never stop, clip, or read real hardware.
     output = args.output or Path(__file__).resolve().parent/'results'/(
         args.stage+'-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.csv')
     save(rows, output)
@@ -140,7 +156,8 @@ def run(args):
         with output.with_suffix('.settings.json').open('x', encoding='utf-8') as f:
             json.dump(dict(config, total_current_limit_a=LIMIT_A, mode='simulation',
                            stage=args.stage, model_id=MODEL_ID, version=VERSION, model_bounds=MODEL_BOUNDS,
-                           rf_model_bounds_dbm=RF_MODEL_BOUNDS, rf_output_dbm=getattr(args, 'rf_output_dbm', None),
+                           rf_model_bounds_dbm=RF_MODEL_BOUNDS, rf_powers_dbm=powers,
+                           overcurrent_policy='record_only_simulation',
                            waveform=getattr(args, 'waveform', None),
                            input_csv=str(getattr(args, 'input', '') or '')),
                       f, ensure_ascii=False, indent=2)
@@ -190,12 +207,14 @@ def gui():
             key=name+'_'+suffix
             entries[key]=tk.StringVar(value=str(DEFAULTS[key]))
             ttk.Entry(frame,textvariable=entries[key],width=20).grid(row=i,column=j,padx=5)
-    ttk.Label(frame,text='方向由起終點決定；總電流上限 3 A（固定）').grid(row=7,columnspan=3,pady=10)
+    ttk.Label(frame,text='方向由起終點決定；總電流 3 A 僅記錄事件，不停止').grid(row=7,columnspan=3,pady=10)
     result=tk.StringVar(value='第一階段：無 RF。第二階段：載入第一階段 CSV。')
     ttk.Label(frame,textvariable=result,wraplength=610).grid(row=12,columnspan=3,pady=10)
-    rf_power=tk.StringVar(value='30')
+    rf_power=tk.StringVar(value='0')
+    rf_stop=tk.StringVar(value='50')
+    rf_step=tk.StringVar(value='1')
     waveform=tk.StringVar(value='demo')
-    ttk.Label(frame,text='模擬 RF 輸出 (20～46 dBm)').grid(row=9,column=0)
+    ttk.Label(frame,text='RF 起點 (0～50 dBm)').grid(row=9,column=0)
     ttk.Entry(frame,textvariable=rf_power).grid(row=9,column=1)
     ttk.Label(frame,text='波形名稱').grid(row=10,column=0)
     ttk.Entry(frame,textvariable=waveform).grid(row=10,column=1)
@@ -213,13 +232,20 @@ def gui():
         c,_=config()
         target=filedialog.asksaveasfilename(defaultextension='.json',filetypes=[('RD config','*.json')])
         if target:
+            c['rf_sweep'] = dict(start=float(rf_power.get()), stop=float(rf_stop.get()), step=float(rf_step.get()))
+            rf_axis(argparse.Namespace(rf_start=c['rf_sweep']['start'], rf_stop=c['rf_sweep']['stop'], rf_step=c['rf_sweep']['step']))
             Path(target).write_text(json.dumps(c,indent=2),encoding='utf-8')
             result.set('RD 設定已儲存：'+target)
 
     def load_config():
         target=filedialog.askopenfilename(filetypes=[('RD config','*.json')])
         if target:
-            c,_=validate_config(json.loads(Path(target).read_text(encoding='utf-8')))
+            saved=json.loads(Path(target).read_text(encoding='utf-8'))
+            rf=saved.pop('rf_sweep', None)
+            c,_=validate_config(saved)
+            if rf is not None:
+                rf_axis(argparse.Namespace(rf_start=rf['start'],rf_stop=rf['stop'],rf_step=rf['step']))
+                rf_power.set(str(rf['start']));rf_stop.set(str(rf['stop']));rf_step.set(str(rf['step']))
             for k,v in c.items():
                 entries[k].set(str(v))
             result.set('RD 設定已載入：'+target)
@@ -227,7 +253,9 @@ def gui():
     def restore_example():
         for key, value in DEFAULTS.items():
             entries[key].set(str(value))
-        rf_power.set('30')
+        rf_power.set('0')
+        rf_stop.set('50')
+        rf_step.set('1')
         waveform.set('demo')
         result.set('已恢復模擬範例。RD 範圍非實機安全規格，請重新執行第一階段。')
 
@@ -239,15 +267,16 @@ def gui():
                 for p in (c['peaking_start'],c['peaking_stop']):
                     check_model_bias(m,p)
         if stage=='rf':
-            check_rf_power(float(rf_power.get()))
+            rf_axis(argparse.Namespace(rf_start=float(rf_power.get()), rf_stop=float(rf_stop.get()), rf_step=float(rf_step.get())))
             source=filedialog.askopenfilename(title='選擇第一階段 CSV',filetypes=[('CSV','*.csv')])
             if not source:
                 return
         summary='模擬模式；不控制硬體。\n'
         for name in ('main','peaking'):
             summary+=f"{name}: {c[name+'_start']} → {c[name+'_stop']} V; step {c[name+'_step']} V\n"
-        summary+=f'總電流上限 3 A；靜態網格 {count} 點。\n'
+        summary+=f'總電流 3 A 僅記錄；靜態網格 {count} 點。\n'
         if source:
+            summary+=f'RF: {rf_power.get()} → {rf_stop.get()} dBm；步距 {rf_step.get()} dB\n'
             summary+='RF 階段以 CSV 候選偏壓為準，並檢查 RD 安全上下限。\n'+source+'\n'
         if not messagebox.askokcancel('確認後執行',summary):
             return
@@ -256,17 +285,24 @@ def gui():
             return
         args=argparse.Namespace(**c,stage=stage,rd_config=c,output=Path(target),
                                 input=Path(source) if source else None,
-                                rf_output_dbm=float(rf_power.get()) if stage=='rf' else None,waveform=waveform.get())
+                                rf_start=float(rf_power.get()) if stage=='rf' else None,
+                                rf_stop=float(rf_stop.get()) if stage=='rf' else None,
+                                rf_step=float(rf_step.get()) if stage=='rf' else 1,
+                                waveform=waveform.get())
         output,rows=run(args)
         result.set(f'完成 {len(rows)} 點：{output}；結束狀態：{rows[-1]["status"]}。ACLR 未量測。')
-        if not any(r['status']=='simulated' for r in rows):
-            messagebox.showwarning('沒有可用候選點', '第一點即達總電流 3 A，已停止。此 CSV 無法供第二階段使用；請調整偏壓後重跑第一階段。')
+        events=sum(r['status']=='total_current_limit' for r in rows)
+        result.set(f'完成 {len(rows)} 點，3 A 模擬事件 {events} 點（僅記錄、不停止）：{output}')
 
     ttk.Button(frame,text='載入 RD 設定',command=lambda:protect(load_config)).grid(row=8,column=0)
     ttk.Button(frame,text='儲存 RD 設定',command=lambda:protect(save_config)).grid(row=8,column=1)
     ttk.Button(frame,text='第一階段：靜態掃描',command=lambda:protect(lambda:execute('static'))).grid(row=11,column=0,pady=10)
     ttk.Button(frame,text='第二階段：RF 模擬',command=lambda:protect(lambda:execute('rf'))).grid(row=11,column=1,pady=10)
     ttk.Button(frame,text='恢復模擬範例',command=restore_example).grid(row=13,column=0,pady=8)
+    ttk.Label(frame,text='RF 終點 (0～50 dBm)').grid(row=14,column=0)
+    ttk.Entry(frame,textvariable=rf_stop).grid(row=14,column=1)
+    ttk.Label(frame,text='RF 步距大小 (dB，正數)').grid(row=15,column=0)
+    ttk.Entry(frame,textvariable=rf_step).grid(row=15,column=1)
     root.mainloop()
 
 
@@ -279,11 +315,18 @@ def main():
     parser.add_argument('--config',type=Path,required=True,help='RD JSON configuration')
     parser.add_argument('--output',type=Path)
     parser.add_argument('--input',type=Path)
-    parser.add_argument('--rf-output-dbm',type=float,default=30)
+    parser.add_argument('--rf-output-dbm',type=float,help='相容舊版單點 RF 功率')
+    parser.add_argument('--rf-start',type=float)
+    parser.add_argument('--rf-stop',type=float)
+    parser.add_argument('--rf-step',type=float,default=1)
     parser.add_argument('--waveform',default='demo')
     args=parser.parse_args()
     try:
-        c,_=validate_config(json.loads(args.config.read_text(encoding='utf-8')))
+        saved=json.loads(args.config.read_text(encoding='utf-8'))
+        rf=saved.pop('rf_sweep',None)
+        c,_=validate_config(saved)
+        if rf is not None and args.rf_start is None and args.rf_stop is None and args.rf_output_dbm is None:
+            args.rf_start,args.rf_stop,args.rf_step=rf['start'],rf['stop'],rf['step']
         for k,v in c.items():
             setattr(args,k,v)
         args.rd_config=c

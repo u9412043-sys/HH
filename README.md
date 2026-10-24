@@ -74,3 +74,15 @@ python rd_sweep.py rf --config rd_config.example.json --input static.csv --rf-ou
 電流改用單調、有飽和特性的 sigmoid 示意曲線，不再外推原平方公式。Main 1.6 A、Peaking 0.8 A 是任意示意模型的漸近值，**不是實測、不是 PA 額定或硬體保護上限**。僅用於展示流程，不能用此模型推定實機 Vgs/Iddq 對應。3 A 總電流保護獨立判斷，RF 示意工作電流仍可能超過並觸發停止，未將結果截成 3 A。
 
 點選「恢復模擬範例」即可載入寬範圍預設。RF 模型仍僅支援 20～35 dBm；截圖的 46 dBm 尚不支援。v2.1 舊 CSV 請重做第一階段，勿將不同模型資料混用。已測試全範圍 14661 點靜態與 30 dBm RF 流程；Windows GUI 未實機驗證。模擬掃描順序不構成實機偏壓操作建議。
+
+### v2.3：RF 功率掃描與僅記錄事件
+
+GUI 可設定 RF 起點、終點（0～50 dBm）與正數步距（dB），預設 0→50、步距 1。每個 CSV 候選偏壓組合都掃描完整 RF 功率序列，支援遞減。起終點差不是步距整數倍時，最後一點是區間內的最後網格點，不強加終點。GUI 儲存／載入 RD JSON 時也保存 RF 掃描設定；舊 JSON 仍可使用。
+
+```bash
+python rd_sweep.py rf --config rd_config.example.json --input static.csv --rf-start 0 --rf-stop 50 --rf-step 1 --waveform FR1 --output rf.csv
+```
+
+`--rf-output-dbm 46` 保留舊版單點模式；未指定 RF 參數預設掃描 0～50 dBm。組合超過 1,000,000 點會要求減少點數。總電流 >=3 A 僅以每筆 CSV 的 `status=total_current_limit` 記錄，兩階段都不停止、不截斷電流；第二階段不再因該狀態排除候選點。設定快照記錄全部 RF 功率點與 record-only 策略。
+
+所有事件只是示意公式計算後的標記，沒有實機電流偵測、RF 設定、AMC 控制或硬體保護變更。原 RF 電流公式仍是任意示意，50 dBm 下的數值不代表真實 PA，不能用作工作點預測。ACLR 欄位仍留白。
