@@ -312,6 +312,28 @@ def execute(c,folder):
     return folder/'report.xlsx'
 
 
+def save_workflow_config(content,path):
+    """Save draft settings without running commands or requiring live hardware."""
+    import os
+    import tempfile
+    data=json.loads(content)
+    if not isinstance(data,dict):
+        raise ValueError('設定 JSON 最外層必須為物件（大括號）。')
+    target=Path(path)
+    temporary=None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',
+                dir=target.parent,prefix='.'+target.name+'.',suffix='.tmp',delete=False) as f:
+            temporary=Path(f.name)
+            json.dump(data,f,ensure_ascii=False,indent=2,allow_nan=False)
+            f.write('\n')
+        os.replace(temporary,target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return target
+
+
 def gui():
     import tkinter as tk
     from tkinter import filedialog,messagebox,ttk
@@ -319,9 +341,39 @@ def gui():
     text=tk.Text(root,width=100,height=34);text.pack(fill='both',expand=True)
     example=Path(__file__).with_name('workflow.example.json')
     if example.exists():text.insert('1.0',example.read_text(encoding='utf-8'))
+    current_path=None
+    status=tk.StringVar(value='尚未儲存；修改設定後請按儲存。')
+    ttk.Label(root,textvariable=status,wraplength=800).pack(fill='x')
     def load():
+        nonlocal current_path
         path=filedialog.askopenfilename(filetypes=[('JSON','*.json')])
-        if path:text.delete('1.0','end');text.insert('1.0',Path(path).read_text(encoding='utf-8'))
+        if not path:return
+        try:
+            content=Path(path).read_text(encoding='utf-8-sig')
+            if not isinstance(json.loads(content),dict):
+                raise ValueError('設定 JSON 最外層必須為物件。')
+            text.delete('1.0','end');text.insert('1.0',content)
+            current_path=Path(path)
+            status.set('已載入：'+str(current_path))
+        except (ValueError,OSError) as exc:
+            messagebox.showerror('載入失敗',str(exc))
+    def save(as_new=False):
+        nonlocal current_path
+        try:
+            content=text.get('1.0','end')
+            if not isinstance(json.loads(content),dict):
+                raise ValueError('設定 JSON 最外層必須為物件。')
+            path=current_path
+            if as_new or path is None:
+                selected=filedialog.asksaveasfilename(title='儲存設定 JSON',
+                    defaultextension='.json',filetypes=[('JSON','*.json')],
+                    initialfile=current_path.name if current_path else 'workflow_settings.json')
+                if not selected:return
+                path=Path(selected)
+            current_path=save_workflow_config(content,path)
+            status.set('已儲存：'+str(current_path)+'（未執行量測）')
+        except (ValueError,OSError) as exc:
+            messagebox.showerror('儲存失敗',str(exc))
     def run():
         try:
             c=json.loads(text.get('1.0','end'));validate(c)
@@ -333,6 +385,8 @@ def gui():
             messagebox.showinfo('完成',str(path))
         except Exception as exc:messagebox.showerror('失敗',str(exc))
     ttk.Button(root,text='載入設定 JSON',command=load).pack(side='left')
+    ttk.Button(root,text='儲存設定 JSON',command=save).pack(side='left')
+    ttk.Button(root,text='另存新檔',command=lambda:save(True)).pack(side='left')
     ttk.Button(root,text='執行量測／生成含曲線 Excel',command=run).pack(side='left')
     root.mainloop()
 

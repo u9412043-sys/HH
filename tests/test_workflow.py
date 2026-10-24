@@ -74,3 +74,25 @@ class WorkflowTests(unittest.TestCase):
             self.assertTrue((target/'report.xlsx').exists())
             status=json.loads((target/'run_status.json').read_text())
             self.assertFalse(status['completed'])
+
+class ConfigSaveTests(unittest.TestCase):
+    def test_save_and_update_without_hardware(self):
+        from pa_workflow import save_workflow_config
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'settings.json'
+            c=config();c['mode']='hardware';c['waveform']='測試波形'
+            # Incomplete hardware commands are valid drafts; no commands run.
+            save_workflow_config(json.dumps(c,ensure_ascii=False),p)
+            self.assertEqual(json.loads(p.read_text(encoding='utf-8')),c)
+            c['analysis']['target_pout_dbm']=46
+            save_workflow_config(json.dumps(c),p)
+            self.assertEqual(json.loads(p.read_text())['analysis']['target_pout_dbm'],46)
+    def test_invalid_json_preserves_existing_file(self):
+        from pa_workflow import save_workflow_config
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'settings.json';p.write_text('{"original":true}')
+            for value in ('{broken','[]','{"value":NaN}'):
+                with self.assertRaises(ValueError):
+                    save_workflow_config(value,p)
+                self.assertEqual(p.read_text(),'{"original":true}')
+            self.assertEqual(list(Path(d).iterdir()),[p])
