@@ -473,6 +473,10 @@ def gui():
     ttk.Label(frame,text='P1dB 容差 ±dB').grid(row=18,column=0)
     ttk.Entry(frame,textvariable=p1db_tolerance).grid(row=18,column=1)
     ttk.Button(frame,text='匯入 P1dB 表 → 匯出工作點',command=lambda:protect(pick_p1db)).grid(row=19,columnspan=2,pady=8)
+    def launch_workflow():
+        import subprocess
+        subprocess.Popen([sys.executable,str(Path(__file__).with_name('pa_workflow.py'))])
+    ttk.Button(frame,text='完整量測／P1dB 分析／Excel 曲線報表',command=lambda:protect(launch_workflow)).grid(row=20,columnspan=3,pady=10)
     root.mainloop()
 
 

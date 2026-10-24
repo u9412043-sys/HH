@@ -1,0 +1,92 @@
+{
+  "mode": "simulation",
+  "limits": {
+    "main": [
+      -5,
+      -1
+    ],
+    "peaking": [
+      -10,
+      -1
+    ]
+  },
+  "bias_points": [
+    {
+      "main": -3.1,
+      "peaking": -5.2
+    },
+    {
+      "main": -3.1,
+      "peaking": -4.978
+    },
+    {
+      "main": -3.1,
+      "peaking": -4.8
+    },
+    {
+      "main": -2.95,
+      "peaking": -5.2
+    },
+    {
+      "main": -2.95,
+      "peaking": -4.978
+    },
+    {
+      "main": -2.95,
+      "peaking": -4.8
+    },
+    {
+      "main": -2.79,
+      "peaking": -5.2
+    },
+    {
+      "main": -2.79,
+      "peaking": -4.978
+    },
+    {
+      "main": -2.79,
+      "peaking": -4.8
+    }
+  ],
+  "rf_sweep": {
+    "start": 0,
+    "stop": 40,
+    "step": 1
+  },
+  "settle_seconds": 0.1,
+  "command_timeout_seconds": 10,
+  "frequency_hz": 3500000000,
+  "vdd_v": 28,
+  "waveform": "DEMO_CW",
+  "load_description": "示意負載；未校準",
+  "analysis": {
+    "target_pout_dbm": 38,
+    "min_p1db_output_dbm": 40,
+    "aclr_limit_dbc": -40,
+    "baseline_points": 3,
+    "baseline_gain_tolerance_db": 0.2
+  },
+  "commands": {
+    "set_bias": [
+      "REPLACE_set_bias"
+    ],
+    "read_dc": [
+      "REPLACE_read_dc"
+    ],
+    "rf_on": [
+      "REPLACE_rf_on"
+    ],
+    "rf_off": [
+      "REPLACE_rf_off"
+    ],
+    "set_rf": [
+      "REPLACE_set_rf"
+    ],
+    "read_rf": [
+      "REPLACE_read_rf"
+    ],
+    "safe_bias": [
+      "REPLACE_safe_bias"
+    ]
+  }
+}

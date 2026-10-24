@@ -100,3 +100,7 @@ P1dB 表需含 `main_vgs_v,peaking_vgs_v,p1db_output_dbm` 三欄；空白模板�
 匯出的工作點 CSV 含 Main／Peaking Vgs、原第一階段電流、P1dB 值與來源、目標／容差、選點規則；可直接在第二階段選取，固定該偏壓後掃描 RF。注意第一階段電流仍為模擬，即使 P1dB 來源是真實量測，也不會把靜態電流改標為實測。P1dB 目標可隨 RD 設定檔保存。沒有合格匹配時清楚提示、不輸出假工作點。
 
 目前仍不控制 RF output on、AMC7836 或 IQxel；RF sweep 仍為模擬，ACLR 留白。27 項測試涵蓋工作點篩選及第二階段交接，GUI／瀏覽器視覺顯示尚未在 Windows 驗證。
+
+## 完整量測與 Excel 初版
+
+請參考 [WORKFLOW.md](WORKFLOW.md)。以 `start_workflow.bat` 或 `python pa_workflow.py` 啟動；先安裝 `python -m pip install -r requirements.txt`。原 RD 視窗底部也有完整報表入口。預設模擬可輸出包含 7 張可編輯曲線圖的 `report.xlsx`；實機命令待提供後才能連接。
